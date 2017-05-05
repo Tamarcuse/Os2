@@ -12,6 +12,11 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+struct {
+  struct spinlock threadLock;
+  struct proc proc[NPROC];
+} threadTable;
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -24,6 +29,10 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+}
+
+void defHand(int signum){
+    cprintf("**DEFAULT HANDLER**\nA signal %d was accepted by process %d\n", signum, proc->pid);
 }
 
 //PAGEBREAK: 32
@@ -72,7 +81,13 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-
+  
+  int i;
+  for(i = 0; i < NUMSIG; i++){
+      p->handlers[i] = 0;
+  }
+  p->wakeUpTime = 0;
+      
   return p;
 }
 
@@ -483,3 +498,134 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+sighandler_t signal(int signum, sighandler_t handler)
+{
+     if(signum > 31 || signum < 0){
+         return (sighandler_t)-1;
+     }
+    acquire(&ptable.lock);
+    sighandler_t oldHandler = proc->handlers[signum];
+    proc->handlers[signum] = handler;
+    release(&ptable.lock);
+    //cprintf("Process %d is registered to signal %d\n", proc->pid, signum);
+    
+    return oldHandler;
+}
+
+int sigsend(int pid, int signum)
+{
+    if(signum > 31 || signum < 0){
+        return -1;
+    }
+    
+    struct proc *p;
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->pid == pid && p->state != UNUSED && p->state!=ZOMBIE){
+            p->pending[signum] = 1;
+            release(&ptable.lock);
+            return 0;
+        }
+    }
+    release(&ptable.lock);
+    return -1;
+}
+
+// returns the first signal which is pending and turns off its bit
+int isPending(struct proc *p){
+    int i;
+    int ans = -1;
+    for(i = 0; i < NUMSIG; i++){
+        if(p->pending[i]){
+            acquire(&ptable.lock);
+            p->pending[i] = 0;  // turn off the bit
+            release(&ptable.lock);
+            ans = i ;
+            break;
+        }
+    }
+    return ans;
+}
+
+
+
+void asmSigretCall(){
+       __asm__ (
+          "movl $24, %eax\n\t" // sigreturn number
+          "int     $64");
+}
+/*
+ * DANGER
+  */     
+void checkSignals(struct trapframe *tf){
+
+    int pendSig;
+    if(proc && (tf->cs&3) == DPL_USER && (pendSig = isPending(proc)) >= 0){
+        
+        proc->isHandlingSig = 1;
+        
+        //default handler:
+        if(proc->handlers[pendSig] == 0){
+            defHand(pendSig);
+            proc->isHandlingSig = 0;
+            return;
+        }
+        //Non-default handler:
+        else{
+            uint esp = proc->tf->esp;
+            esp -= sizeof(struct trapframe);    // reserve space for trapframe 
+                        
+            // copy trapframe to the stack
+            memmove((void *)esp , (void*)proc->tf , sizeof(struct trapframe));
+            // copy asmSigretCall to the stack
+            int sizeSig = &checkSignals - &asmSigretCall;
+            esp -= sizeSig;                 // reserve space for sigreturn
+            memmove((void *)esp,asmSigretCall,sizeSig);
+            *((int*) (esp - 4)) = pendSig; // push handle number
+            *((int*) (esp - 8)) = esp;     //push esp
+            esp -= 8;
+            proc->tf->esp = esp;           //update esp
+            
+            proc->tf->eip=(uint)proc->handlers[pendSig];//execute the func
+            
+        }
+    }
+}
+
+int sigreturn(void){ 
+    
+    uint esp = proc->tf->esp + (&checkSignals - &asmSigretCall) + 8;
+    memmove((void*)proc->tf,(void *)esp, sizeof(struct trapframe));
+    proc->isHandlingSig = 0;
+    return 0;
+}
+
+int alarm(int wTime){
+    if(wTime < 0){
+        return -1;
+    }
+    if(wTime == 0){
+        proc->pending[SIGALARM] = 0;
+        proc->wakeUpTime = -1;
+    }
+    else{
+        proc->wakeUpTime = ticks + wTime;
+    }
+    return 0;
+}
+
+void checkAlarms(void){
+    struct proc *p;
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->wakeUpTime == ticks){
+            release(&ptable.lock);
+            sigsend(p->pid, SIGALARM);
+            acquire(&ptable.lock);
+        }
+    }
+      release(&ptable.lock);
+}
+        
+    

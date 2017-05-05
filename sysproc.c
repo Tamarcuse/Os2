@@ -28,7 +28,7 @@ sys_wait(void)
 
 int
 sys_kill(void)
-{
+    {
   int pid;
 
   if(argint(0, &pid) < 0)
@@ -89,3 +89,53 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_signal(void)
+{
+    int signum;
+    //sighandler_t * oldSig;
+    char * sighand;
+    
+    if(argint(0, &signum) < 0)
+        return -1;
+    if(argptr(1, &sighand, 4) < 0)
+        return -1;
+    
+    signal(signum, (sighandler_t)sighand);
+    return 0;
+}
+
+int
+sys_sigsend(void)
+{
+    int signum, pid;
+
+    if(argint(0, &pid) < 0)
+        return -1;
+    if(argint(1, &signum) < 0)
+        return -1;
+    
+    sigsend(pid, signum);
+    return 0;
+}
+
+int
+sys_sigreturn(void)
+{
+    return sigreturn();
+    return 0;
+}
+
+int
+sys_alarm(void)
+{
+    int wTime;
+
+    if(argint(0, &wTime) < 0)
+        return -1;
+    
+    alarm(wTime);
+    return 0;
+}
+        

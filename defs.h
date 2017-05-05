@@ -10,6 +10,10 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+typedef void (*sighandler_t)(int);
+#define SIGALARM 14
+#define MAX_UTHREADS 64
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -116,6 +120,11 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+sighandler_t    signal(int, sighandler_t);
+int             sigsend(int, int);
+int             sigreturn(void);
+int             alarm(int);
+void            checkAlarms(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
