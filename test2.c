@@ -51,12 +51,12 @@ void tthread1(void *arg) {
   int i;
    // printf(1, "heeeerrrrrreeee \n");
   //uthread_join(1);
-    for(i = 0; i < 100; i++) {
+    for(i = 0; i < 50; i++) {
     printf(1, "thread1: %d \n",i);
   }
-  uthread_sleep(2000);
+  //uthread_sleep(2000);
 
-  for(i = 100; i < 200; i++) {
+  for(i = 50; i < 150; i++) {
     printf(1, "thread1: %d \n",i);
   }
 }
@@ -65,12 +65,12 @@ void tthread2(void *arg) {
   int i;
    // printf(1, "heeeerrrrrreeee \n");
   //uthread_join(1);
-    for(i = 0; i < 100; i++) {
+    for(i = 0; i < 10; i++) {
     printf(1, "thread2: %d \n",i);
   }
-  uthread_sleep(200);
+  uthread_join(1);
 
-  for(i = 100; i < 200; i++) {
+  for(i = 50; i < 100; i++) {
     printf(1, "thread2: %d \n",i);
   }
 }
@@ -79,8 +79,8 @@ void tthread3(void *arg) {
   int i;
    // printf(1, "heeeerrrrrreeee \n");
   //uthread_join(1);
-    for(i = 0; i < 100; i++) {
-    printf(1, "thread1: %d \n",i);
+    for(i = 0; i < 150; i++) {
+    printf(1, "thread3: %d \n",i);
   }
 
 }

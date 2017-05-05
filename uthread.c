@@ -286,34 +286,33 @@ uthread_self(void)
 int  
 uthread_join(int tid)
 {
-  int i, j;
+    int thPosition, goodTid = 0;
 
-  // if tid is not declared yet or is a negative number, error occured, return
-  if(tid >= next_tid || tid < 0){
-    return -1;
-  }
-  
-  for(i = 0; i < MAX_UTHREADS; ++i){
-    if(threadTable[i].tid == tid){
-        goto GOOD_TID;
+    // if tid is not declared yet or is a negative number, error occured, return
+    if(tid >= next_tid || tid < 0){
+        return -1;
     }
-    if(threadTable[runningThread].waiting == tid){
-        goto GOOD_TID;
-    }
-  }
-        
-    for(j = 0; j < MAX_UTHREADS; j++){
-        if(threadTable[runningThread].waiting == -1){
-            threadTable[runningThread].waiting = tid;
-            threadTable[runningThread].state = WAIT;
-            goto GOOD_TID;
+
+    for(thPosition = 0; thPosition < MAX_UTHREADS; thPosition++){
+        if(threadTable[thPosition].tid == tid){
+            goodTid = 1;
+            break;
         }
     }
-    return -1;
 
-GOOD_TID:	
-
-  return tid;
+    if(goodTid){
+        int notFreeOrMain = threadTable[thPosition].state != FREE && threadTable[thPosition].state != MAINTHREAD;
+        if(threadTable[runningThread].waiting == -1 && notFreeOrMain){
+            threadTable[runningThread].waiting = tid;
+            threadTable[runningThread].state = WAIT;
+            printf(1, "\n   Thread %d is now waiting on Thread %d\n", runningThread, tid);
+        }
+        uthread_schedule();
+        return tid;
+    }
+    else{
+        return -1;
+    }
 }
 
 int uthread_sleep(int ticks){
@@ -325,7 +324,6 @@ int uthread_sleep(int ticks){
     threadTable[runningThread].sleep = curTick + ticks;
     printf(1, "\n  Thread %d is now aSleep \n", runningThread);
     uthread_schedule();
-    alarm(UTHREAD_QUANTA);
     return 0;
 }
 
