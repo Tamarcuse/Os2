@@ -326,9 +326,10 @@ int uthread_sleep(int ticks){
     return 0;
 }
 
-********************************************************************** 
-************************** BINARY SEMAPHORE **************************
-**********************************************************************
+// ********************************************************************** 
+// ************************** BINARY SEMAPHORE **************************
+// **********************************************************************
+
 
 struct binary_semaphore bSemTable[MAX_BSEM];   // array of semaphores 
 int next_sid = 1;
@@ -371,46 +372,38 @@ int dequeue(int sid){
 }
 
 int bsem_alloc(){
-    int i, freeSpot = -1;
+    alarm(0);
+    int i, j, freeSpot = -1;
     for(i = 0; i < MAX_BSEM; i++){
-        if(bSemTable[i].sid == 0){
+        if(bSemTable[i].inUse == 0){
             freeSpot = i;
-        }
-    }
-    
-    if(freeSpot == -1){ return -1;}     // Max Semaphores
-    
-    //Create new Semaphore
-    struct binary_semaphore newSem;
-    newSem.sid = next_sid;
-    next_sid++;                         // update next sid
-    //initlock(&newSem.lock, "semLock");
-    newSem.size = 0;                    
-    newSem.value = 1; 
-    for(i = 0; i < MAX_UTHREADS; i++){
-        newSem.queue[i] = 0;
-    }
-    
-    bSemTable[freeSpot] = newSem;
-    
-    return next_sid-1;   
-}
-
-void bsem_free(int sid){
-    int i, toFree = -1;
-    for(i = 0; i < MAX_BSEM; i++){
-        if(bSemTable[i].sid == sid){
-            toFree = i;
             break;
         }
     }
-    if(toFree == -1) {return;}
-    struct binary_semaphore emptySem;
-    bSemTable[toFree] = emptySem;
-    return;
+    //Max Semaphores
+    if(freeSpot == -1){
+        alarm(UTHREAD_QUANTA);
+        return -1;
+    }     
+    
+    bSemTable[freeSpot].locked = 1;
+    bSemTable[freeSpot].inUse = 1;
+    for(j = 0 ; j < MAX_UTHREADS ; j++){
+        bSemTable[freeSpot].queue[j] = 0;
+    }
+    
+    alarm(UTHREAD_QUANTA);
+    return freeSpot;   
+}
+
+void bsem_free(int semDes){
+    alarm(0);
+    bSemTable[semDes].inUse = 0;
+    alarm(UTHREAD_QUANTA);
 }
 
 void bsem_down(int sid){
+    alarm(0);
     int i, toDown = -1;
     for(i = 0; i < MAX_BSEM; i++){
         if(bSemTable[i].sid == sid){
@@ -418,20 +411,27 @@ void bsem_down(int sid){
             break;
         }
     }
-     if(toDown == -1) {return;}
+     if(toDown == -1){
+         alarm(UTHREAD_QUANTA);
+         return;
+    }
          
-     //acquire(&bSemTable[toDown].lock);
-     if(bSemTable[toDown].value <= 0){
+     if(bSemTable[toDown].locked == 0){
          threadTable[runningThread].state = BLOCKED;
          enqueue(runningThread, toDown);
+         uthread_schedule();
      }
      else{
-        bSemTable[toDown].value--;
-        alarm(UTHREAD_QUANTA);
+        if(bSemTable[toDown].locked == 1){
+            bSemTable[toDown].locked = 0;
+         }
      }
+     alarm(UTHREAD_QUANTA);
+     return;    
 }
 
 void bsem_up(int sid){
+    alarm(0);
     int i, toUp = -1;
     for(i = 0; i < MAX_BSEM; i++){
         if(bSemTable[i].sid == sid){
@@ -439,25 +439,66 @@ void bsem_up(int sid){
             break;
         }
     }
-     if(toUp == -1) {return;}
+     if(toUp == -1) {
+        alarm(UTHREAD_QUANTA);
+        return;
+    }
      
      int WakeTid = dequeue(bSemTable[toUp].sid);
      if(WakeTid){ //If queue is not empty
          for(i = 0; i < MAX_UTHREADS; i++){
              if(threadTable[i].tid == WakeTid){
                  threadTable[i].state = RUNNABLE;
-                 //release(&bSemTable[toUp].lock);
-                 uthread_schedule();
                  break;
              }
          }
      }
      else{
-         bSemTable[toUp].value++;
+         if(bSemTable[toUp].locked == 0){
+            bSemTable[toUp].locked = 1;
+         }
      }
-     //release(&bSemTable[toUp].lock);
 }
 
+// ********************************************************************** 
+// ************************* COUNTING SEMAPHORE *************************
+// **********************************************************************
+
+struct counting_semaphore * makeC_Sem(int value){
+    struct counting_semaphore * sem = malloc(sizeof(struct counting_semaphore)); 
+
+    sem->value = value;
+    sem->s1 = bsem_alloc();
+    sem->s2 = bsem_alloc(); 
+    
+    if(value == 0){ //s2 gets the minimum value between 1 and init_value
+        bsem_down(sem->s2);
+    }
+    return sem;
+}
+
+void down(struct counting_semaphore *sem){
+    alarm(0);
+    bsem_down(sem->s2);
+    bsem_down(sem->s1);
+    sem->value--;
+    if(sem->value > 0){
+        bsem_up(sem->s2);
+    }
+    bsem_up(sem->s1);
+    alarm(UTHREAD_QUANTA);
+}
+
+void up(struct counting_semaphore *sem){
+    alarm(0);
+    bsem_down(sem->s1);
+    sem->value++;
+    if(sem->value == 1){
+        bsem_up(sem->s2);
+    }
+    bsem_up(sem->s1);
+    alarm(UTHREAD_QUANTA);
+}
 
 
 

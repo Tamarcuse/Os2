@@ -1,5 +1,3 @@
-#include "spinlock.h"
-
 #define UTHREAD_QUANTA 5
 #define SIGALRM 14
 
@@ -26,7 +24,7 @@ int uthread_self();
 int uthread_join(int tid);
 
 
-struct uthread {
+struct uthread{
         int tid;                        // thread id
         int esp;                        // stack pointer      
         int ebp;                        // base pointer     
@@ -36,19 +34,28 @@ struct uthread {
         int sleep;                      // the tick when the thread should stop sleeping
 };
 
-typedef struct binary_semaphore semaphore_t, *semaphore_p;
-
 struct binary_semaphore{ 
     int sid;
-    int value;
+    int locked;
     int queue[MAX_UTHREADS]; //queue of waiting tid's
     int size;
-    //struct spinlock lock;
+    int inUse;               //Indicator whether the sem was allocated
+};
+
+ struct counting_semaphore{
+	int value;
+	int s1;
+	int s2;         
 };
 
 int bsem_alloc();
 void bsem_free(int sid);
 void bsem_down(int sid);
 void bsem_up(int sid);
+struct counting_semaphore * makeC_Sem(int value);
+void down(struct counting_semaphore *sem);
+void up(struct counting_semaphore *sem);
+
+
  
 
